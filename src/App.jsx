@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   imageInterval: 8, // seconds
 };
 
-// Helper to convert standard Google Drive share links to direct image links
+// Helper to convert standard Google Drive share links to direct image links (for manual images)
 const getDirectImageUrl = (url) => {
   if (!url) return '';
   // Check for standard drive share link: /d/ID/view
@@ -66,12 +66,21 @@ const useDriveFolderImages = (folderUrl, apiKey) => {
 
     const fetchImages = async () => {
       try {
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'&key=${apiKey}&fields=files(id)`);
+        // CHANGED: We now request the thumbnailLink. This is a much more stable way to embed Drive images.
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'&key=${apiKey}&fields=files(id,thumbnailLink,webContentLink)`);
         const data = await res.json();
+        
         if (data.error) throw new Error(data.error.message);
         
         if (data.files) {
-          const urls = data.files.map(f => `https://drive.google.com/uc?export=view&id=${f.id}`);
+          const urls = data.files.map(f => {
+            // If Google provides a thumbnail link, we change the size parameter from default to high-res (s1920)
+            if (f.thumbnailLink) {
+              return f.thumbnailLink.replace(/=s\d+$/, '=s1920');
+            }
+            // Fallback to the old method if thumbnail is not available
+            return `https://drive.google.com/uc?export=view&id=${f.id}`;
+          });
           setFolderImages(urls);
           setFolderError(null);
         }
@@ -225,7 +234,7 @@ const WeatherWidget = ({ forecast }) => {
   );
 };
 
-const ImageCarousel = ({ images, intervalSecs }) => {
+const ImageCarousel = ({ images, intervalSecs, folderError }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
@@ -238,14 +247,23 @@ const ImageCarousel = ({ images, intervalSecs }) => {
 
   if (!images || images.length === 0) {
     return (
-      <div className="flex-1 bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-sky-200/50 flex items-center justify-center border border-sky-100 min-h-[400px]">
+      <div className="flex-1 bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-sky-200/50 flex flex-col items-center justify-center border border-sky-100 min-h-[400px] p-8 text-center gap-4">
         <p className="text-2xl text-sky-600 font-medium">לא הוגדרו תמונות. אנא הוסף תמונות בהגדרות.</p>
+        {folderError && (
+           <p className="text-red-500 bg-red-50 p-4 rounded-xl border border-red-200 w-full max-w-lg">{folderError}</p>
+        )}
       </div>
     );
   }
 
   return (
     <div className="flex-1 relative overflow-hidden rounded-3xl shadow-2xl shadow-sky-200/60 border-4 border-white/80 bg-white min-h-[400px]">
+      {folderError && (
+        <div className="absolute top-4 right-4 z-50 bg-red-500/90 text-white text-xs px-3 py-1 rounded-lg shadow-lg backdrop-blur-sm">
+          שגיאת דרייב: בדוק הגדרות בממשק
+        </div>
+      )}
+      
       {images.map((src, idx) => (
         <div
           key={idx}
@@ -262,7 +280,7 @@ const ImageCarousel = ({ images, intervalSecs }) => {
       <div className="absolute inset-0 bg-gradient-to-t from-sky-900/40 via-transparent to-transparent pointer-events-none" />
       
       {/* Image Indicators */}
-      <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-2 z-10">
+      <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-2 z-10 flex-wrap px-4">
         {images.map((_, idx) => (
           <div 
             key={idx} 
@@ -518,7 +536,7 @@ export default function App() {
   const forecast = useWeather();
   
   // Fetch folder images dynamically
-  const { folderImages } = useDriveFolderImages(settings.driveFolderUrl, settings.driveApiKey);
+  const { folderImages, folderError } = useDriveFolderImages(settings.driveFolderUrl, settings.driveApiKey);
 
   // Combine manual images with dynamic folder images
   const allImages = useMemo(() => {
@@ -574,7 +592,7 @@ export default function App() {
       return;
     }
 
-    const elem = document.documentElement; // More reliable than appRef.current
+    const elem = document.documentElement; // Targets the whole page, more reliable
     if (!document.fullscreenElement) {
       if (elem.requestFullscreen) {
         elem.requestFullscreen().then(() => {
@@ -583,7 +601,7 @@ export default function App() {
           console.warn(`Native fullscreen blocked: ${err.message}. Using pseudo-fullscreen fallback.`);
           setIsPseudoFullscreen(true);
           setIsFullscreen(true);
-          showToast('עבר למסך מלא מדומה (בטלוויזיה זה יעבוד רגיל)');
+          showToast('עבר למסך מלא מדומה');
         });
       } else if (elem.webkitRequestFullscreen) { /* Safari */
         elem.webkitRequestFullscreen();
@@ -710,8 +728,8 @@ export default function App() {
         {/* Content Area (Carousel + Weather) */}
         <main className="flex-1 grid grid-cols-3 gap-6 min-h-0">
           {/* Main Image Carousel - 2/3 of the screen */}
-          <div className="col-span-2 flex flex-col min-w-0 h-full">
-             <ImageCarousel images={allImages} intervalSecs={settings.imageInterval} />
+          <div className="col-span-2 flex flex-col min-w-0 h-full relative">
+             <ImageCarousel images={allImages} intervalSecs={settings.imageInterval} folderError={folderError} />
           </div>
 
           {/* Weather Sidebar - 1/3 of the screen */}
