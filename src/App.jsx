@@ -217,16 +217,6 @@ const ImageCarousel = ({ images, intervalSecs }) => {
         />
       ))}
       <div className="absolute inset-0 bg-gradient-to-t from-sky-900/40 via-transparent to-transparent pointer-events-none" />
-      
-      {/* Image Indicators */}
-      <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-2 z-10 flex-wrap px-4">
-        {images.map((_, idx) => (
-          <div 
-            key={idx} 
-            className={`h-2 rounded-full transition-all duration-500 ${idx === shuffledIndices[currentIndex] ? 'w-8 bg-white' : 'w-2 bg-white/50'}`}
-          />
-        ))}
-      </div>
     </div>
   );
 };
@@ -419,7 +409,19 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
 
             <div className="flex flex-col gap-3">
               {formData.images.map((img, idx) => (
-                <div key={idx} className="flex gap-2">
+                <div key={idx} className="flex gap-2 items-center bg-white p-2 rounded-xl border border-sky-100 shadow-sm">
+                  {img ? (
+                    <img 
+                      src={img} 
+                      alt="תצוגה מקדימה" 
+                      className="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-50"
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg border border-dashed border-slate-300 shrink-0 bg-slate-50 flex items-center justify-center text-xs text-slate-400">
+                      ריק
+                    </div>
+                  )}
                   <input 
                     type="text" 
                     placeholder="https://..."
@@ -428,7 +430,7 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
                     value={img}
                     onChange={(e) => handleArrayChange('images', idx, e.target.value)}
                   />
-                  <button onClick={() => removeArrayItem('images', idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                  <button onClick={() => removeArrayItem('images', idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
                     <Trash2 size={20} />
                   </button>
                 </div>
