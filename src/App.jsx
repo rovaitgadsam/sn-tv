@@ -8,8 +8,7 @@ const DEFAULT_SETTINGS = {
   logoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRbe48vi05L75mmqOyt03JTyMjrDL0QaVkQSSrwHiGmwg&s=10',
   quoteText: 'החינוך הוא הנשק החזק ביותר שבו תוכלו להשתמש כדי לשנות את העולם.',
   quoteAuthor: 'נלסון מנדלה',
-  driveFolderUrl: '',
-  driveApiKey: '',
+  imgbbApiKey: '', 
   tickerMessages: [
     'ברוכים הבאים לבית הספר אורט שחקים נהריה!',
     'ההרשמה לשנת הלימודים הבאה בעיצומה - פנו למזכירות לפרטים נוספים.',
@@ -25,79 +24,10 @@ const DEFAULT_SETTINGS = {
   imageInterval: 8, // seconds
 };
 
-// Helper to convert standard Google Drive share links to direct image links (for manual images)
 const getDirectImageUrl = (url) => {
-  if (!url) return '';
-  // Check for standard drive share link: /d/ID/view
-  const dMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (dMatch && dMatch[1]) {
-    return `https://drive.google.com/uc?export=view&id=${dMatch[1]}`;
-  }
-  // Check for open?id=ID
-  const idMatch = url.match(/id=([a-zA-Z0-9_-]+)/);
-  if (idMatch && idMatch[1]) {
-    return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`;
-  }
-  return url; // Return as is if not a recognized Drive link
+    return url;
 };
 
-// Hook to fetch images from a public Google Drive folder
-const useDriveFolderImages = (folderUrl, apiKey) => {
-  const [folderImages, setFolderImages] = useState([]);
-  const [folderError, setFolderError] = useState(null);
-
-  useEffect(() => {
-    if (!folderUrl || !apiKey) {
-      setFolderImages([]);
-      setFolderError(null);
-      return;
-    }
-
-    const extractId = (url) => {
-      const match = url.match(/folders\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
-      return match ? match[1] : null;
-    };
-
-    const folderId = extractId(folderUrl);
-    if (!folderId) {
-      setFolderError('קישור לתיקייה אינו תקין');
-      return;
-    }
-
-    const fetchImages = async () => {
-      try {
-        // CHANGED: We now request the thumbnailLink. This is a much more stable way to embed Drive images.
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'&key=${apiKey}&fields=files(id,thumbnailLink,webContentLink)`);
-        const data = await res.json();
-        
-        if (data.error) throw new Error(data.error.message);
-        
-        if (data.files) {
-          const urls = data.files.map(f => {
-            // If Google provides a thumbnail link, we change the size parameter from default to high-res (s1920)
-            if (f.thumbnailLink) {
-              return f.thumbnailLink.replace(/=s\d+$/, '=s1920');
-            }
-            // Fallback to the old method if thumbnail is not available
-            return `https://drive.google.com/uc?export=view&id=${f.id}`;
-          });
-          setFolderImages(urls);
-          setFolderError(null);
-        }
-      } catch (e) {
-        console.error('Failed to fetch folder images', e);
-        setFolderError('שגיאה במשיכת תמונות. ודא שהתיקייה פתוחה לכל מי שברשותו הקישור והמפתח תקין.');
-      }
-    };
-
-    fetchImages();
-    // Refresh folder contents every hour
-    const interval = setInterval(fetchImages, 60 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [folderUrl, apiKey]);
-
-  return { folderImages, folderError };
-};
 
 // WMO Weather code mapping to Lucide Icons & Hebrew Text
 const getWeatherDetails = (code) => {
@@ -185,7 +115,6 @@ const useWeather = () => {
 
   return forecast;
 };
-
 
 const TopoHexBackground = () => (
   <div className="fixed inset-0 z-0 pointer-events-none opacity-20" style={{
@@ -407,43 +336,72 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
               </div>
             </div>
             
-            {/* Google Drive Folder Sync */}
+            {/* ImgBB Image Upload */}
             <div className="mb-6 bg-white p-4 rounded-xl border border-sky-200 shadow-sm">
               <h4 className="font-bold text-sky-700 mb-2 flex items-center gap-2">
-                <Cloud size={18} /> משיכה אוטומטית מתיקיית Google Drive
+                <Cloud size={18} /> העלאת תמונות מהמחשב (באמצעות ImgBB)
               </h4>
               <p className="text-xs text-slate-500 mb-4">
-                הזן קישור לתיקייה (שמוגדרת כ"פתוחה לכולם") ומפתח API של גוגל כדי להציג אוטומטית את כל התמונות שבתוכה. התמונות יתווספו לאלו שהוגדרו ידנית.
+                הזן מפתח API של ImgBB כדי להעלות תמונות ישירות מתוך המחשב. התמונות יאוחסנו בחינם בענן. 
+                <a href="https://api.imgbb.com/" target="_blank" rel="noreferrer" className="text-sky-500 underline mr-1">להנפקת מפתח בחינם לחץ כאן</a>.
               </p>
-              <div className="flex flex-col gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">קישור לתיקיית גוגל דרייב</label>
-                  <input 
-                    type="text" 
-                    placeholder="https://drive.google.com/drive/folders/..."
-                    className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400 text-sm text-left"
-                    dir="ltr"
-                    value={formData.driveFolderUrl || ''}
-                    onChange={(e) => handleChange('driveFolderUrl', e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Google Drive API Key (חובה)</label>
-                  <input 
-                    type="text" 
-                    placeholder="AIzaSy..."
-                    className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400 text-sm font-mono text-left"
-                    dir="ltr"
-                    value={formData.driveApiKey || ''}
-                    onChange={(e) => handleChange('driveApiKey', e.target.value)}
-                  />
-                </div>
+              
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-slate-700 mb-1">ImgBB API Key (חובה להעלאה)</label>
+                <input 
+                  type="text" 
+                  placeholder="הדבק כאן את מפתח ה-API..."
+                  className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400 text-sm font-mono text-left"
+                  dir="ltr"
+                  value={formData.imgbbApiKey || ''}
+                  onChange={(e) => handleChange('imgbbApiKey', e.target.value)}
+                />
               </div>
+
+              {formData.imgbbApiKey && (
+                <div className="relative border-2 border-dashed border-sky-300 rounded-lg p-6 text-center hover:bg-sky-50 transition-colors">
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      
+                      const formDataUpload = new FormData();
+                      formDataUpload.append('image', file);
+                      
+                      try {
+                        // Change button text visual feedback could be added here
+                        const res = await fetch(`https://api.imgbb.com/1/upload?key=${formData.imgbbApiKey}`, {
+                          method: 'POST',
+                          body: formDataUpload
+                        });
+                        const data = await res.json();
+                        if(data.success) {
+                          addArrayItem('images');
+                          handleArrayChange('images', formData.images.length, data.data.url);
+                        } else {
+                          alert('שגיאה בהעלאת התמונה: ' + data.error.message);
+                        }
+                      } catch(err) {
+                        alert('שגיאה בתקשורת עם השרת');
+                      }
+                      e.target.value = ''; // Reset input
+                    }}
+                  />
+                  <div className="flex flex-col items-center gap-2 text-sky-600">
+                    <Plus size={24} />
+                    <span className="font-medium">לחץ כאן לבחירת תמונה מהמחשב</span>
+                    <span className="text-xs text-slate-400">או גרור תמונה לכאן</span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <h4 className="font-bold text-sky-800 mb-2">תמונות בודדות (ידני)</h4>
+            <h4 className="font-bold text-sky-800 mb-2">תמונות (כתובות ישירות)</h4>
             <p className="text-xs text-slate-500 mb-4">
-              הדבק כאן קישורים ישירים לתמונות, או קישורי שיתוף רגילים מגוגל דרייב (ללא צורך במפתח API).
+              הדבק כאן קישורים ישירים לתמונות.
             </p>
             
             <div className="flex flex-col gap-3">
@@ -534,15 +492,10 @@ export default function App() {
 
   const { date, hebrewDate } = useDateTime();
   const forecast = useWeather();
-  
-  // Fetch folder images dynamically
-  const { folderImages, folderError } = useDriveFolderImages(settings.driveFolderUrl, settings.driveApiKey);
 
-  // Combine manual images with dynamic folder images
   const allImages = useMemo(() => {
-    const combined = [...(settings.images || []), ...(folderImages || [])];
-    return combined.filter(img => img && img.trim() !== '');
-  }, [settings.images, folderImages]);
+    return (settings.images || []).filter(img => img && img.trim() !== '');
+  }, [settings.images]);
 
   // Save settings to LocalStorage whenever they change
   useEffect(() => {
@@ -729,7 +682,7 @@ export default function App() {
         <main className="flex-1 grid grid-cols-3 gap-6 min-h-0">
           {/* Main Image Carousel - 2/3 of the screen */}
           <div className="col-span-2 flex flex-col min-w-0 h-full relative">
-             <ImageCarousel images={allImages} intervalSecs={settings.imageInterval} folderError={folderError} />
+             <ImageCarousel images={allImages} intervalSecs={settings.imageInterval} folderError={null} />
           </div>
 
           {/* Weather Sidebar - 1/3 of the screen */}
