@@ -675,7 +675,7 @@ export default function App() {
   const timeString = date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   const dateString = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  // CSS for Ticker
+  // CSS for Ticker (Speed modified to 60s)
   useEffect(() => {
     const style = document.createElement('style');
     style.innerHTML = `
@@ -686,7 +686,7 @@ export default function App() {
       .animate-ticker {
         display: flex;
         width: max-content;
-        animation: ticker-ltr 30s linear infinite;
+        animation: ticker-ltr 60s linear infinite;
         will-change: transform;
       }
       .animate-ticker:hover {
