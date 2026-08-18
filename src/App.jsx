@@ -2,38 +2,31 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Settings, Sun, Cloud, CloudRain, CloudLightning, Wind, X, Plus, Trash2, Clock, Calendar, Droplets, Quote, Maximize, Minimize, Upload, Monitor } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-let firebaseConfig;
-if (typeof __firebase_config !== 'undefined') {
-  firebaseConfig = JSON.parse(__firebase_config);
-} else {
-  // ⚠️ חובה להדביק כאן את הקונפיגורציה של פרויקט ה-Firebase שלך! ⚠️
- // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
+// ⚠️ הדבק כאן את הקונפיגורציה המלאה שקיבלת מפיירבייס ⚠️
+// מחק את השורות האלו והדבק את הקוד האמיתי שלך
 const firebaseConfig = {
-  apiKey: "AIzaSyC_zDZ4ahbRRx1Z5mRzs9URRjl4a0FkEcA",
-  authDomain: "sn-tv-9fcfc.firebaseapp.com",
-  projectId: "sn-tv-9fcfc",
-  storageBucket: "sn-tv-9fcfc.firebasestorage.app",
-  messagingSenderId: "859825387330",
-  appId: "1:859825387330:web:9d2bc4b6e4abfbefbf3adb"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-  };
+// אתחול בטוח של פיירבייס מחוץ לקומפוננטה
+let app, auth, db;
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (error) {
+  console.error("Firebase initialization error", error);
 }
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'ort-tv-public';
+const appId = 'ort-tv-public';
 
 // Default settings for the app
 const DEFAULT_SETTINGS = {
@@ -616,24 +609,28 @@ export default function App() {
   const forecast = useWeather();
 
   useEffect(() => {
+    // Only attempt auth if Firebase was successfully initialized
+    if (!auth) {
+        showToast('שגיאה בחיבור למסד הנתונים. ודא שקוד ה-Firebase הוזן כראוי.');
+        return;
+    }
+    
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+         await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth init error:", error);
       }
     };
     initAuth();
+    
     const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    // Wait until user is authenticated anonymously and db is ready
+    if (!user || !db) return;
 
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'tv_settings');
     const unsubscribe = onSnapshot(docRef, 
@@ -641,7 +638,8 @@ export default function App() {
         if (snapshot.exists()) {
           setSettings({ ...DEFAULT_SETTINGS, ...snapshot.data() });
         } else {
-          setDoc(docRef, DEFAULT_SETTINGS);
+          // If document doesn't exist yet, create it with defaults
+          setDoc(docRef, DEFAULT_SETTINGS).catch(e => console.error("Error creating initial doc", e));
         }
       }, 
       (error) => {
@@ -653,7 +651,11 @@ export default function App() {
   }, [user]);
 
   const saveSettingsToCloud = async (newSettings) => {
-    if (!user) return;
+    if (!user || !db) {
+        showToast('אין חיבור לענן. ודא שהגדרות ה-Firebase תקינות.');
+        return;
+    }
+    
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'tv_settings');
     try {
       await setDoc(docRef, newSettings);
