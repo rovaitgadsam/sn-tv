@@ -1,5 +1,39 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, Sun, Cloud, CloudRain, CloudLightning, Wind, X, Plus, Trash2, Droplets, Quote, Maximize, Minimize } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Settings, Sun, Cloud, CloudRain, CloudLightning, Wind, X, Plus, Trash2, Clock, Calendar, Droplets, Quote, Maximize, Minimize, Upload, Monitor } from 'lucide-react';
+
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
+
+let firebaseConfig;
+if (typeof __firebase_config !== 'undefined') {
+  firebaseConfig = JSON.parse(__firebase_config);
+} else {
+  // ⚠️ חובה להדביק כאן את הקונפיגורציה של פרויקט ה-Firebase שלך! ⚠️
+ // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyC_zDZ4ahbRRx1Z5mRzs9URRjl4a0FkEcA",
+  authDomain: "sn-tv-9fcfc.firebaseapp.com",
+  projectId: "sn-tv-9fcfc",
+  storageBucket: "sn-tv-9fcfc.firebasestorage.app",
+  messagingSenderId: "859825387330",
+  appId: "1:859825387330:web:9d2bc4b6e4abfbefbf3adb"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+  };
+}
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'ort-tv-public';
 
 // Default settings for the app
 const DEFAULT_SETTINGS = {
@@ -7,7 +41,7 @@ const DEFAULT_SETTINGS = {
   logoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRbe48vi05L75mmqOyt03JTyMjrDL0QaVkQSSrwHiGmwg&s=10',
   quoteText: 'החינוך הוא הנשק החזק ביותר שבו תוכלו להשתמש כדי לשנות את העולם.',
   quoteAuthor: 'נלסון מנדלה',
-  imgbbApiKey: '', 
+  imgbbApiKey: '',
   tickerMessages: [
     'ברוכים הבאים לבית הספר אורט שחקים נהריה!',
     'ההרשמה לשנת הלימודים הבאה בעיצומה - פנו למזכירות לפרטים נוספים.',
@@ -22,8 +56,6 @@ const DEFAULT_SETTINGS = {
   ],
   imageInterval: 8, // seconds
 };
-
-const getDirectImageUrl = (url) => url;
 
 // WMO Weather code mapping to Lucide Icons & Hebrew Text
 const getWeatherDetails = (code) => {
@@ -48,7 +80,6 @@ const useDateTime = () => {
   }, []);
 
   useEffect(() => {
-    // Fetch Hebrew Date
     const fetchHebrewDate = async () => {
       try {
         const isoDate = date.toISOString().split('T')[0];
@@ -56,17 +87,17 @@ const useDateTime = () => {
         const data = await res.json();
         setHebrewDate(data.hebrew);
       } catch (e) {
+        console.error('Failed to fetch Hebrew date', e);
         setHebrewDate('לא זמין');
       }
     };
     fetchHebrewDate();
     
-    // Refresh at midnight
     const now = new Date();
     const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0) - now;
     const timeout = setTimeout(fetchHebrewDate, msUntilMidnight);
     return () => clearTimeout(timeout);
-  }, [date.getDate()]); 
+  }, [date.getDate()]);
 
   return { date, hebrewDate };
 };
@@ -157,46 +188,46 @@ const WeatherWidget = ({ forecast }) => {
 
 const ImageCarousel = ({ images, intervalSecs }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [shuffledIndices, setShuffledIndices] = useState([]);
+  const [shuffledImages, setShuffledImages] = useState([]);
 
-  // Shuffle function
-  const shuffleArray = (arrayLength) => {
-    const indices = Array.from({ length: arrayLength }, (_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
+  const shuffleArray = (array) => {
+    const newArr = [...array];
+    for (let i = newArr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
+      [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
     }
-    return indices;
+    return newArr;
   };
 
   useEffect(() => {
     if (images && images.length > 0) {
-      setShuffledIndices(shuffleArray(images.length));
-      setCurrentIndex(0); 
+      setShuffledImages(shuffleArray(images));
+      setCurrentIndex(0);
+    } else {
+      setShuffledImages([]);
     }
-  }, [images]); 
+  }, [images]);
 
   useEffect(() => {
-    if (!images || images.length === 0 || shuffledIndices.length === 0) return;
-
+    if (!shuffledImages || shuffledImages.length === 0) return;
+    
     const interval = setInterval(() => {
-      setCurrentIndex((prevIndex) => {
-        const nextIndex = prevIndex + 1;
-        // Reshuffle when reaching the end
-        if (nextIndex >= shuffledIndices.length) {
-          setShuffledIndices(shuffleArray(images.length));
+      setCurrentIndex((prev) => {
+        const nextIndex = prev + 1;
+        if (nextIndex >= shuffledImages.length) {
+          setShuffledImages(shuffleArray(images));
           return 0;
         }
         return nextIndex;
       });
     }, intervalSecs * 1000);
-
+    
     return () => clearInterval(interval);
-  }, [images, intervalSecs, shuffledIndices.length]);
+  }, [shuffledImages, intervalSecs, images]);
 
-  if (!images || images.length === 0) {
+  if (!shuffledImages || shuffledImages.length === 0) {
     return (
-      <div className="flex-1 bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-sky-200/50 flex flex-col items-center justify-center border border-sky-100 min-h-[400px] p-8 text-center gap-4">
+      <div className="flex-1 bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-sky-200/50 flex items-center justify-center border border-sky-100 min-h-[400px]">
         <p className="text-2xl text-sky-600 font-medium">לא הוגדרו תמונות. אנא הוסף תמונות בהגדרות.</p>
       </div>
     );
@@ -204,26 +235,28 @@ const ImageCarousel = ({ images, intervalSecs }) => {
 
   return (
     <div className="flex-1 relative overflow-hidden rounded-3xl shadow-2xl shadow-sky-200/60 border-4 border-white/80 bg-white min-h-[400px]">
-      {images.map((src, idx) => (
+      {shuffledImages.map((src, idx) => (
         <div
-          key={idx}
+          key={`${src}-${idx}`}
           className="absolute inset-0 transition-opacity duration-1000 ease-in-out"
           style={{
-            opacity: idx === shuffledIndices[currentIndex] ? 1 : 0,
-            backgroundImage: `url(${getDirectImageUrl(src)})`,
+            opacity: idx === currentIndex ? 1 : 0,
+            backgroundImage: `url(${src})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}
         />
       ))}
-      <div className="absolute inset-0 bg-gradient-to-t from-sky-900/40 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-t from-sky-900/20 via-transparent to-transparent pointer-events-none" />
     </div>
   );
 };
 
-const AdminPanel = ({ settings, setSettings, onClose }) => {
+const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }) => {
   const [formData, setFormData] = useState({ ...settings });
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const fileInputRef = useRef(null);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -245,6 +278,54 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
     setFormData(prev => ({ ...prev, [field]: newArray }));
   };
 
+  const handleImageUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    if (!formData.imgbbApiKey) {
+      setUploadError('נא להזין מפתח API של ImgBB למעלה לפני העלאת תמונות.');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError('');
+
+    const newImageUrls = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const data = new FormData();
+      data.append('image', file);
+
+      try {
+        const res = await fetch(`https://api.imgbb.com/1/upload?key=${formData.imgbbApiKey}`, {
+          method: 'POST',
+          body: data
+        });
+        
+        const result = await res.json();
+        if (result.success) {
+          newImageUrls.push(result.data.url);
+        } else {
+          throw new Error(result.error?.message || 'שגיאה בהעלאה');
+        }
+      } catch (error) {
+        console.error('Upload failed', error);
+        setUploadError(`שגיאה בהעלאת התמונה ${file.name}: ${error.message}`);
+      }
+    }
+
+    if (newImageUrls.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        images: [...prev.images, ...newImageUrls]
+      }));
+    }
+
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSave = () => {
     const cleanedData = {
       ...formData,
@@ -252,293 +333,376 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
       images: formData.images.filter(img => img.trim() !== '')
     };
     setSettings(cleanedData);
-    onClose();
+    if (!isStandaloneMode && onClose) {
+      onClose();
+    } else {
+      alert('ההגדרות נשמרו בענן בהצלחה! המסך בטלוויזיה יתעדכן כעת מיד.');
+    }
   };
 
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-    
-    setIsUploading(true);
-    const newImageUrls = [];
-
-    for (const file of files) {
-      const formDataUpload = new FormData();
-      formDataUpload.append('image', file);
-      
-      try {
-        const res = await fetch(`https://api.imgbb.com/1/upload?key=${formData.imgbbApiKey}`, {
-          method: 'POST',
-          body: formDataUpload
-        });
-        const data = await res.json();
-        if(data.success) {
-          newImageUrls.push(data.data.url);
-        } else {
-          alert(`שגיאה בהעלאת התמונה ${file.name}: ` + data.error.message);
-        }
-      } catch(err) {
-        alert('שגיאה בתקשורת עם השרת');
-      }
-    }
-
-    if (newImageUrls.length > 0) {
-      setFormData(prev => ({ ...prev, images: [...prev.images, ...newImageUrls] }));
-    }
-    
-    setIsUploading(false);
-    e.target.value = ''; // Reset input
+  const navigateToDisplay = () => {
+    window.location.hash = ''; // Remove the hash to go to display mode
   };
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center p-6 border-b border-slate-100">
-          <h2 className="text-2xl font-bold text-sky-900 flex items-center gap-2">
-            <Settings className="text-sky-500" /> הגדרות מסך תצוגה
-          </h2>
+  const adminContent = (
+    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col mx-auto h-[90vh] lg:h-auto lg:max-h-[90vh]">
+      <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-white rounded-t-3xl sticky top-0 z-10">
+        <h2 className="text-2xl font-bold text-sky-900 flex items-center gap-2">
+          <Settings className="text-sky-500" /> הגדרות מסך תצוגה
+        </h2>
+        {isStandaloneMode ? (
+          <button onClick={navigateToDisplay} className="flex items-center gap-2 px-4 py-2 bg-sky-100 hover:bg-sky-200 text-sky-700 rounded-xl transition-colors font-medium">
+            <Monitor size={18} /> מעבר לתצוגת הטלוויזיה
+          </button>
+        ) : (
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
             <X className="text-slate-500" />
           </button>
-        </div>
+        )}
+      </div>
 
-        <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-8">
+      <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-8">
+        
+        {/* General Settings */}
+        <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
+          <h3 className="text-lg font-bold text-sky-800 mb-4">הגדרות כלליות</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">שם בית הספר / כותרת</label>
+              <input 
+                type="text" 
+                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 focus:border-sky-400 outline-none"
+                value={formData.schoolName}
+                onChange={(e) => handleChange('schoolName', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">כתובת לוגו (URL)</label>
+              <input 
+                type="text" 
+                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none"
+                value={formData.logoUrl}
+                onChange={(e) => handleChange('logoUrl', e.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Quote Settings */}
+        <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
+          <h3 className="text-lg font-bold text-sky-800 mb-4">ציטוט / מסר קבוע (הריבוע השמאלי)</h3>
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">תוכן הציטוט / המסר</label>
+              <textarea 
+                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none resize-none"
+                rows="2"
+                value={formData.quoteText || ''}
+                onChange={(e) => handleChange('quoteText', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">מקור / מחבר (אופציונלי)</label>
+              <input 
+                type="text" 
+                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none"
+                value={formData.quoteAuthor || ''}
+                onChange={(e) => handleChange('quoteAuthor', e.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Images Settings - Gallery View */}
+        <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-sky-800">גלריית תמונות מתחלפות</h3>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-600">זמן החלפה (שניות):</label>
+              <input 
+                type="number" 
+                min="3" max="60"
+                className="w-20 p-1 border border-slate-300 rounded-lg text-center outline-none focus:ring-2 focus:ring-sky-400"
+                value={formData.imageInterval}
+                onChange={(e) => handleChange('imageInterval', parseInt(e.target.value) || 8)}
+              />
+            </div>
+          </div>
           
-          <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
-            <h3 className="text-lg font-bold text-sky-800 mb-4">הגדרות כלליות</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* ImgBB Setup & Upload */}
+          <div className="mb-6 bg-white p-5 rounded-xl border border-sky-200 shadow-sm">
+            <div className="flex justify-between items-start mb-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">שם בית הספר / כותרת</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 focus:border-sky-400 outline-none"
-                  value={formData.schoolName}
-                  onChange={(e) => handleChange('schoolName', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">כתובת לוגו (URL)</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none"
-                  value={formData.logoUrl}
-                  onChange={(e) => handleChange('logoUrl', e.target.value)}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
-            <h3 className="text-lg font-bold text-sky-800 mb-4">ציטוט / מסר קבוע</h3>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">תוכן הציטוט / המסר</label>
-                <textarea 
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none resize-none"
-                  rows="2"
-                  value={formData.quoteText || ''}
-                  onChange={(e) => handleChange('quoteText', e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">מקור / מחבר</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none"
-                  value={formData.quoteAuthor || ''}
-                  onChange={(e) => handleChange('quoteAuthor', e.target.value)}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-sky-800">ניהול תמונות</h3>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-slate-600">זמן החלפה (שניות):</label>
-                <input 
-                  type="number" 
-                  min="3" max="60"
-                  className="w-20 p-1 border border-slate-300 rounded-lg text-center"
-                  value={formData.imageInterval}
-                  onChange={(e) => handleChange('imageInterval', parseInt(e.target.value) || 8)}
-                />
+                <h4 className="font-bold text-sky-700 flex items-center gap-2">
+                  <Upload size={18} /> העלאת תמונות ישירה מהמחשב
+                </h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  1. הירשם בחינם ל- <a href="https://api.imgbb.com/" target="_blank" className="text-sky-600 underline">api.imgbb.com</a> <br/>
+                  2. הדבק כאן את מפתח ה-API שקיבלת כדי לאפשר העלאה ישירה. (ניתן לבחור מספר תמונות יחד!)
+                </p>
               </div>
             </div>
             
-            <div className="mb-6 bg-white p-4 rounded-xl border border-sky-200 shadow-sm">
-              <h4 className="font-bold text-sky-700 mb-2 flex items-center gap-2">
-                העלאת תמונות מהמחשב (באמצעות ImgBB)
-              </h4>
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-slate-700 mb-1">ImgBB API Key</label>
+            <div className="flex flex-col gap-4">
+              <div>
                 <input 
                   type="text" 
-                  placeholder="הדבק כאן את מפתח ה-API..."
-                  className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400 text-sm font-mono text-left"
+                  placeholder="הכנס את ה-API Key של ImgBB כאן..."
+                  className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400 text-sm font-mono text-left bg-slate-50"
                   dir="ltr"
                   value={formData.imgbbApiKey || ''}
                   onChange={(e) => handleChange('imgbbApiKey', e.target.value)}
                 />
               </div>
 
-              {formData.imgbbApiKey && (
-                <div className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isUploading ? 'border-sky-500 bg-sky-50' : 'border-sky-300 hover:bg-sky-50'}`}>
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    multiple
-                    disabled={isUploading}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                    onChange={handleImageUpload}
-                  />
-                  <div className="flex flex-col items-center gap-2 text-sky-600">
-                    {isUploading ? (
-                      <span className="font-medium animate-pulse text-sky-700">מעלה תמונות, אנא המתן...</span>
-                    ) : (
-                      <>
-                        <Plus size={24} />
-                        <span className="font-medium">לחץ כאן לבחירת תמונה (או מספר תמונות יחד)</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {formData.images.map((img, idx) => (
-                <div key={idx} className="relative bg-slate-50 rounded-xl border border-sky-200 shadow-sm aspect-video overflow-hidden group">
-                  {img ? (
-                    <img 
-                      src={img} 
-                      alt="תצוגה מקדימה" 
-                      className="w-full h-full object-cover"
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
+              <div className="relative">
+                <input 
+                  type="file" 
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  ref={fileInputRef}
+                  className="hidden"
+                  disabled={isUploading || !formData.imgbbApiKey}
+                />
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || !formData.imgbbApiKey}
+                  className={`w-full py-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 transition-colors ${
+                    !formData.imgbbApiKey ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed' :
+                    isUploading ? 'border-sky-300 bg-sky-50 text-sky-500 cursor-wait' : 
+                    'border-sky-300 hover:border-sky-500 hover:bg-sky-50 text-sky-600 cursor-pointer'
+                  }`}
+                >
+                  {isUploading ? (
+                    <span className="font-medium animate-pulse">מעלה תמונות, אנא המתן...</span>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
-                      ריק
-                    </div>
+                    <>
+                      <Upload size={24} />
+                      <span className="font-medium">לחץ כאן לבחירת תמונה (או מספר תמונות) מהמחשב</span>
+                    </>
                   )}
+                </button>
+                {uploadError && <p className="text-red-500 text-xs mt-2">{uploadError}</p>}
+              </div>
+            </div>
+          </div>
+
+          <h4 className="font-bold text-sky-800 mb-4 border-b border-sky-200 pb-2">התמונות שבאוויר</h4>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {formData.images.map((img, idx) => (
+              <div key={idx} className="group relative aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                <img src={img} alt={`תמונה ${idx+1}`} className="w-full h-full object-cover" onError={(e) => e.target.src = 'https://via.placeholder.com/300?text=שגיאה+בטעינה'} />
+                
+                {/* Delete Button Overlay */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button 
                     onClick={() => removeArrayItem('images', idx)} 
-                    className="absolute top-2 left-2 p-2 bg-white/80 hover:bg-red-500 text-red-500 hover:text-white rounded-lg shadow-sm backdrop-blur-sm transition-all"
+                    className="p-3 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transform scale-90 group-hover:scale-100 transition-all"
                     title="מחק תמונה"
                   >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
-            <h3 className="text-lg font-bold text-sky-800 mb-4">הודעות רצות (Ticker)</h3>
-            <div className="flex flex-col gap-3">
-              {formData.tickerMessages.map((msg, idx) => (
-                <div key={idx} className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="הכנס הודעה..."
-                    className="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400"
-                    value={msg}
-                    onChange={(e) => handleArrayChange('tickerMessages', idx, e.target.value)}
-                  />
-                  <button onClick={() => removeArrayItem('tickerMessages', idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
                     <Trash2 size={20} />
                   </button>
                 </div>
-              ))}
+              </div>
+            ))}
+            
+            {/* Manual Add URL option as a card */}
+            <div className="aspect-video bg-white border-2 border-dashed border-sky-300 rounded-xl flex flex-col items-center justify-center p-4 hover:bg-sky-50 transition-colors">
               <button 
-                onClick={() => addArrayItem('tickerMessages')}
-                className="flex items-center gap-2 text-sky-600 hover:text-sky-700 font-medium py-2 px-4 bg-sky-100/50 hover:bg-sky-100 rounded-lg w-fit transition-colors"
+                onClick={() => addArrayItem('images')}
+                className="flex flex-col items-center gap-2 text-sky-600 w-full h-full justify-center"
               >
-                <Plus size={18} /> הוסף הודעה
+                <Plus size={24} />
+                <span className="text-sm font-medium text-center">הוסף מקישור ידני</span>
               </button>
             </div>
-          </section>
+          </div>
+          
+          {/* Invisible inputs for manual links if added */}
+          {formData.images.some(img => img === '') && (
+            <div className="mt-4 flex flex-col gap-2">
+              <p className="text-xs font-bold text-sky-700">הזן קישור לתמונה החדשה שהוספת:</p>
+              {formData.images.map((img, idx) => img === '' ? (
+                <div key={idx} className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="https://...קישור לתמונה"
+                    className="flex-1 p-2 border border-sky-300 rounded-lg outline-none focus:ring-2 focus:ring-sky-400 bg-sky-50"
+                    value={img}
+                    onChange={(e) => handleArrayChange('images', idx, e.target.value)}
+                  />
+                  <button onClick={() => removeArrayItem('images', idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              ) : null)}
+            </div>
+          )}
 
-        </div>
+        </section>
 
-        <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl flex justify-end gap-3">
+        {/* Ticker Settings */}
+        <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
+          <h3 className="text-lg font-bold text-sky-800 mb-4">הודעות רצות (Ticker)</h3>
+          <div className="flex flex-col gap-3">
+            {formData.tickerMessages.map((msg, idx) => (
+              <div key={idx} className="flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder="הכנס הודעה..."
+                  className="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400"
+                  value={msg}
+                  onChange={(e) => handleArrayChange('tickerMessages', idx, e.target.value)}
+                />
+                <button onClick={() => removeArrayItem('tickerMessages', idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            ))}
+            <button 
+              onClick={() => addArrayItem('tickerMessages')}
+              className="flex items-center gap-2 text-sky-600 hover:text-sky-700 font-medium py-2 px-4 bg-sky-100/50 hover:bg-sky-100 rounded-lg w-fit transition-colors"
+            >
+              <Plus size={18} /> הוסף הודעה
+            </button>
+          </div>
+        </section>
+
+      </div>
+
+      <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl flex justify-end gap-3 sticky bottom-0">
+        {!isStandaloneMode && (
           <button onClick={onClose} className="px-6 py-2 text-slate-600 hover:bg-slate-200 rounded-xl font-medium transition-colors">
             ביטול
           </button>
-          <button onClick={handleSave} className="px-6 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold shadow-lg shadow-sky-600/30 transition-colors">
-            שמור והצג
-          </button>
-        </div>
+        )}
+        <button onClick={handleSave} className="px-6 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold shadow-lg shadow-sky-600/30 transition-colors">
+          שמור הגדרות
+        </button>
       </div>
     </div>
   );
+
+  if (isStandaloneMode) {
+    return (
+      <div className="min-h-screen bg-slate-100 p-4 md:p-8" dir="rtl">
+        {adminContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
+      {adminContent}
+    </div>
+  );
 };
+
 
 export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [currentHash, setCurrentHash] = useState(window.location.hash);
+  const appRef = useRef(null);
   
-  const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem('ort_tv_settings');
-    if (saved) {
-      try {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-      } catch (e) {
-        return DEFAULT_SETTINGS;
-      }
-    }
-    return DEFAULT_SETTINGS;
-  });
+  const [user, setUser] = useState(null);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 
   const { date, hebrewDate } = useDateTime();
   const forecast = useWeather();
 
-  const allImages = useMemo(() => {
-    return (settings.images || []).filter(img => img && img.trim() !== '');
-  }, [settings.images]);
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth init error:", error);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('ort_tv_settings', JSON.stringify(settings));
-  }, [settings]);
+    if (!user) return;
 
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'tv_settings');
+    const unsubscribe = onSnapshot(docRef, 
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setSettings({ ...DEFAULT_SETTINGS, ...snapshot.data() });
+        } else {
+          setDoc(docRef, DEFAULT_SETTINGS);
+        }
+      }, 
+      (error) => {
+        console.error("Error fetching settings:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const saveSettingsToCloud = async (newSettings) => {
+    if (!user) return;
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'tv_settings');
+    try {
+      await setDoc(docRef, newSettings);
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      showToast('שגיאה בשמירת נתונים לענן.');
+    }
+  };
+
+  // Listen to hash changes for routing
+  useEffect(() => {
+    const handleHashChange = () => setCurrentHash(window.location.hash);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Format Time and Date
   const timeString = date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   const dateString = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+  // CSS for Ticker
   useEffect(() => {
     const style = document.createElement('style');
     style.innerHTML = `
       @keyframes ticker-ltr {
-        0% { transform: translate(0, -50%); }
-        100% { transform: translate(calc(100vw + 100%), -50%); }
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100vw); }
       }
       .animate-ticker {
-        position: absolute;
-        right: 100%;
-        top: 50%;
         display: flex;
         width: max-content;
-        white-space: nowrap;
-        animation: ticker-ltr 40s linear infinite;
+        animation: ticker-ltr 30s linear infinite;
         will-change: transform;
       }
       .animate-ticker:hover {
         animation-play-state: paused;
       }
-      :fullscreen { background-color: #f0f9ff; }
-      :-webkit-full-screen { background-color: #f0f9ff; }
+      :fullscreen {
+        background-color: #f0f9ff;
+      }
+      :-webkit-full-screen {
+        background-color: #f0f9ff;
+      }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
   }, []);
 
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(''), 4000);
-  };
-
+  // Handle Fullscreen Toggle
   const toggleFullscreen = () => {
     if (isPseudoFullscreen) {
       setIsPseudoFullscreen(false);
@@ -549,40 +713,58 @@ export default function App() {
     const elem = document.documentElement;
     if (!document.fullscreenElement) {
       if (elem.requestFullscreen) {
-        elem.requestFullscreen().then(() => setIsFullscreen(true)).catch(err => {
+        elem.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {
           setIsPseudoFullscreen(true);
           setIsFullscreen(true);
-          showToast('עבר למסך מלא מדומה');
         });
       } else if (elem.webkitRequestFullscreen) {
         elem.webkitRequestFullscreen();
         setIsFullscreen(true);
-      } else if (elem.msRequestFullscreen) {
-        elem.msRequestFullscreen();
-        setIsFullscreen(true);
-      } else {
-        setIsPseudoFullscreen(true);
-        setIsFullscreen(true);
-        showToast('עבר למסך מלא מדומה');
       }
     } else {
-      if (document.exitFullscreen) document.exitFullscreen();
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-      else if (document.msExitFullscreen) document.msExitFullscreen();
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
       setIsFullscreen(false);
     }
   };
 
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 4000);
+  };
+
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement));
+      setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
     };
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    
+    return () => {
+        document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
   }, []);
 
+  // Router Logic: If URL ends with #admin, show ONLY the Admin Panel
+  if (currentHash === '#admin') {
+    return (
+      <AdminPanel 
+        settings={settings} 
+        setSettings={saveSettingsToCloud} 
+        isStandaloneMode={true} 
+      />
+    );
+  }
+
+  // Otherwise, show the TV Display
   return (
     <div 
+      ref={appRef} 
       className={`bg-sky-50 text-slate-800 font-sans overflow-hidden flex flex-col relative selection:bg-sky-200 ${
         isPseudoFullscreen ? 'fixed inset-0 z-[9999] w-full h-full' : 'min-h-screen'
       }`} 
@@ -602,7 +784,7 @@ export default function App() {
           <button 
             onClick={() => setIsAdminOpen(true)}
             className="p-3 bg-white/40 hover:bg-white/80 backdrop-blur-md rounded-full text-sky-700/50 hover:text-sky-700 shadow-sm transition-all"
-            title="פתיחת ממשק ניהול"
+            title="פתיחת ממשק ניהול מקומי"
           >
             <Settings size={20} />
           </button>
@@ -616,13 +798,12 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col p-6 gap-6 z-10 h-screen pb-20">
-        
         <header className="bg-white/70 backdrop-blur-lg rounded-3xl p-4 px-8 shadow-xl shadow-sky-200/40 flex items-center justify-between border border-white">
           <div className="flex items-center gap-6">
             {settings.logoUrl && (
               <img 
                 src={settings.logoUrl} 
-                alt="לוגו" 
+                alt="לוגו בית הספר" 
                 className="h-20 w-auto object-contain drop-shadow-md"
                 onError={(e) => e.target.style.display = 'none'}
               />
@@ -641,6 +822,7 @@ export default function App() {
                 <span>{dateString}</span>
               </div>
             </div>
+
             <div className="text-6xl font-black text-sky-900 tracking-tighter" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {timeString}
             </div>
@@ -648,8 +830,8 @@ export default function App() {
         </header>
 
         <main className="flex-1 grid grid-cols-3 gap-6 min-h-0">
-          <div className="col-span-2 flex flex-col min-w-0 h-full relative">
-             <ImageCarousel images={allImages} intervalSecs={settings.imageInterval} />
+          <div className="col-span-2 flex flex-col min-w-0 h-full">
+             <ImageCarousel images={settings.images} intervalSecs={settings.imageInterval} />
           </div>
 
           <div className="col-span-1 flex flex-col h-full">
@@ -670,21 +852,21 @@ export default function App() {
         </main>
       </div>
 
-      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-sky-900 text-white z-20 flex items-center shadow-[0_-10px_40px_rgba(2,132,199,0.3)] border-t-4 border-sky-400">
-        <div className="bg-sky-500 h-full flex items-center px-6 font-bold text-xl shrink-0 z-10 shadow-[10px_0_20px_rgba(0,0,0,0.2)]">
+      <footer className="fixed bottom-0 left-0 right-0 h-16 bg-sky-900 text-white z-20 flex items-center shadow-[0_-10px_40px_rgba(2,132,199,0.3)] border-t-4 border-sky-400" dir="ltr">
+        <div className="bg-sky-500 h-full flex items-center px-6 font-bold text-xl shrink-0 z-10 shadow-[10px_0_20px_rgba(0,0,0,0.2)]" dir="rtl">
           מבזקי ביה"ס
         </div>
-        <div className="flex-1 overflow-hidden h-full relative">
-          <div className="animate-ticker text-2xl font-medium flex items-center gap-32 px-10">
+        <div className="flex-1 overflow-hidden h-full flex items-center relative">
+          <div className="animate-ticker flex gap-32 px-10" dir="rtl">
             {settings.tickerMessages.length > 0 ? (
               [...settings.tickerMessages, ...settings.tickerMessages, ...settings.tickerMessages].map((msg, idx) => (
-                <span key={idx} className="flex items-center gap-4 shrink-0">
+                <span key={idx} className="flex items-center gap-4 text-2xl font-medium shrink-0 whitespace-nowrap">
                   <span className="w-2 h-2 rounded-full bg-sky-300 inline-block shrink-0" />
                   {msg}
                 </span>
               ))
             ) : (
-              <span>אין הודעות כרגע.</span>
+              <span className="text-2xl font-medium shrink-0">אין הודעות כרגע.</span>
             )}
           </div>
         </div>
@@ -693,10 +875,11 @@ export default function App() {
       {isAdminOpen && (
         <AdminPanel 
           settings={settings} 
-          setSettings={setSettings} 
+          setSettings={saveSettingsToCloud} 
           onClose={() => setIsAdminOpen(false)} 
         />
       )}
+
     </div>
   );
 }
