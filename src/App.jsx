@@ -5,15 +5,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-// ⚠️ הדבק כאן את הקונפיגורציה המלאה שקיבלת מפיירבייס ⚠️
-// מחק את השורות האלו והדבק את הקוד האמיתי שלך
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyC_zDZ4ahbRRx1Z5mRzs9URRjl4a0FkEcA",
+  authDomain: "sn-tv-9fcfc.firebaseapp.com",
+  projectId: "sn-tv-9fcfc",
+  storageBucket: "sn-tv-9fcfc.firebasestorage.app",
+  messagingSenderId: "859825387330",
+  appId: "1:859825387330:web:9d2bc4b6e4abfbefbf3adb"
 };
 
 // אתחול בטוח של פיירבייס מחוץ לקומפוננטה
