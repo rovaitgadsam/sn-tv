@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Settings, Sun, Cloud, CloudRain, CloudLightning, Wind, X, Plus, Trash2, Clock, Calendar, Droplets, Quote, Maximize, Minimize } from 'lucide-react';
-
+import React, { useState, useEffect, useMemo } from 'react';
+import { Settings, Sun, Cloud, CloudRain, CloudLightning, Wind, X, Plus, Trash2, Droplets, Quote, Maximize, Minimize } from 'lucide-react';
 
 // Default settings for the app
 const DEFAULT_SETTINGS = {
@@ -24,10 +23,7 @@ const DEFAULT_SETTINGS = {
   imageInterval: 8, // seconds
 };
 
-const getDirectImageUrl = (url) => {
-    return url;
-};
-
+const getDirectImageUrl = (url) => url;
 
 // WMO Weather code mapping to Lucide Icons & Hebrew Text
 const getWeatherDetails = (code) => {
@@ -41,7 +37,6 @@ const getWeatherDetails = (code) => {
   return { icon: <Sun className="text-yellow-400" size={32} />, text: 'בהיר' };
 };
 
-
 // Hook for current time & date
 const useDateTime = () => {
   const [date, setDate] = useState(new Date());
@@ -53,7 +48,7 @@ const useDateTime = () => {
   }, []);
 
   useEffect(() => {
-    // Fetch Hebrew Date (Updates once a day or on load)
+    // Fetch Hebrew Date
     const fetchHebrewDate = async () => {
       try {
         const isoDate = date.toISOString().split('T')[0];
@@ -61,30 +56,28 @@ const useDateTime = () => {
         const data = await res.json();
         setHebrewDate(data.hebrew);
       } catch (e) {
-        console.error('Failed to fetch Hebrew date', e);
         setHebrewDate('לא זמין');
       }
     };
     fetchHebrewDate();
     
-    // Refresh Hebrew date exactly at midnight
+    // Refresh at midnight
     const now = new Date();
     const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0) - now;
     const timeout = setTimeout(fetchHebrewDate, msUntilMidnight);
     return () => clearTimeout(timeout);
-  }, [date.getDate()]); // Re-run when the day changes
+  }, [date.getDate()]); 
 
   return { date, hebrewDate };
 };
 
-// Hook for fetching Open-Meteo weather (Nahariya Coordinates)
+// Hook for fetching Open-Meteo weather
 const useWeather = () => {
   const [forecast, setForecast] = useState([]);
   
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        // Nahariya Coordinates: Lat 33.0081, Lon 35.0955
         const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=33.0081&longitude=35.0955&daily=weathercode,temperature_2m_max,temperature_2m_min&current_weather=true&timezone=auto');
         const data = await res.json();
         
@@ -108,7 +101,6 @@ const useWeather = () => {
     };
 
     fetchWeather();
-    // Refresh weather every hour
     const interval = setInterval(fetchWeather, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -163,49 +155,67 @@ const WeatherWidget = ({ forecast }) => {
   );
 };
 
-const ImageCarousel = ({ images, intervalSecs, folderError }) => {
+const ImageCarousel = ({ images, intervalSecs }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [shuffledIndices, setShuffledIndices] = useState([]);
+
+  // Shuffle function
+  const shuffleArray = (arrayLength) => {
+    const indices = Array.from({ length: arrayLength }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    return indices;
+  };
 
   useEffect(() => {
-    if (!images || images.length === 0) return;
+    if (images && images.length > 0) {
+      setShuffledIndices(shuffleArray(images.length));
+      setCurrentIndex(0); 
+    }
+  }, [images]); 
+
+  useEffect(() => {
+    if (!images || images.length === 0 || shuffledIndices.length === 0) return;
+
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % images.length);
+      setCurrentIndex((prevIndex) => {
+        const nextIndex = prevIndex + 1;
+        // Reshuffle when reaching the end
+        if (nextIndex >= shuffledIndices.length) {
+          setShuffledIndices(shuffleArray(images.length));
+          return 0;
+        }
+        return nextIndex;
+      });
     }, intervalSecs * 1000);
+
     return () => clearInterval(interval);
-  }, [images, intervalSecs]);
+  }, [images, intervalSecs, shuffledIndices.length]);
 
   if (!images || images.length === 0) {
     return (
       <div className="flex-1 bg-white/60 backdrop-blur-md rounded-3xl shadow-xl shadow-sky-200/50 flex flex-col items-center justify-center border border-sky-100 min-h-[400px] p-8 text-center gap-4">
         <p className="text-2xl text-sky-600 font-medium">לא הוגדרו תמונות. אנא הוסף תמונות בהגדרות.</p>
-        {folderError && (
-           <p className="text-red-500 bg-red-50 p-4 rounded-xl border border-red-200 w-full max-w-lg">{folderError}</p>
-        )}
       </div>
     );
   }
 
   return (
     <div className="flex-1 relative overflow-hidden rounded-3xl shadow-2xl shadow-sky-200/60 border-4 border-white/80 bg-white min-h-[400px]">
-      {folderError && (
-        <div className="absolute top-4 right-4 z-50 bg-red-500/90 text-white text-xs px-3 py-1 rounded-lg shadow-lg backdrop-blur-sm">
-          שגיאת דרייב: בדוק הגדרות בממשק
-        </div>
-      )}
-      
       {images.map((src, idx) => (
         <div
           key={idx}
           className="absolute inset-0 transition-opacity duration-1000 ease-in-out"
           style={{
-            opacity: idx === currentIndex ? 1 : 0,
+            opacity: idx === shuffledIndices[currentIndex] ? 1 : 0,
             backgroundImage: `url(${getDirectImageUrl(src)})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center'
           }}
         />
       ))}
-      {/* Overlay gradient for aesthetics */}
       <div className="absolute inset-0 bg-gradient-to-t from-sky-900/40 via-transparent to-transparent pointer-events-none" />
       
       {/* Image Indicators */}
@@ -213,7 +223,7 @@ const ImageCarousel = ({ images, intervalSecs, folderError }) => {
         {images.map((_, idx) => (
           <div 
             key={idx} 
-            className={`h-2 rounded-full transition-all duration-500 ${idx === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/50'}`}
+            className={`h-2 rounded-full transition-all duration-500 ${idx === shuffledIndices[currentIndex] ? 'w-8 bg-white' : 'w-2 bg-white/50'}`}
           />
         ))}
       </div>
@@ -221,9 +231,9 @@ const ImageCarousel = ({ images, intervalSecs, folderError }) => {
   );
 };
 
-
 const AdminPanel = ({ settings, setSettings, onClose }) => {
   const [formData, setFormData] = useState({ ...settings });
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -246,7 +256,6 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
   };
 
   const handleSave = () => {
-    // Filter out empty strings from arrays
     const cleanedData = {
       ...formData,
       tickerMessages: formData.tickerMessages.filter(m => m.trim() !== ''),
@@ -254,6 +263,41 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
     };
     setSettings(cleanedData);
     onClose();
+  };
+
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    
+    setIsUploading(true);
+    const newImageUrls = [];
+
+    for (const file of files) {
+      const formDataUpload = new FormData();
+      formDataUpload.append('image', file);
+      
+      try {
+        const res = await fetch(`https://api.imgbb.com/1/upload?key=${formData.imgbbApiKey}`, {
+          method: 'POST',
+          body: formDataUpload
+        });
+        const data = await res.json();
+        if(data.success) {
+          newImageUrls.push(data.data.url);
+        } else {
+          alert(`שגיאה בהעלאת התמונה ${file.name}: ` + data.error.message);
+        }
+      } catch(err) {
+        alert('שגיאה בתקשורת עם השרת');
+      }
+    }
+
+    if (newImageUrls.length > 0) {
+      setFormData(prev => ({ ...prev, images: [...prev.images, ...newImageUrls] }));
+    }
+    
+    setIsUploading(false);
+    e.target.value = ''; // Reset input
   };
 
   return (
@@ -270,7 +314,6 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
 
         <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-8">
           
-          {/* General Settings */}
           <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
             <h3 className="text-lg font-bold text-sky-800 mb-4">הגדרות כלליות</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -295,9 +338,8 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
             </div>
           </section>
 
-          {/* Quote Settings */}
           <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
-            <h3 className="text-lg font-bold text-sky-800 mb-4">ציטוט / מסר קבוע (הריבוע השמאלי)</h3>
+            <h3 className="text-lg font-bold text-sky-800 mb-4">ציטוט / מסר קבוע</h3>
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">תוכן הציטוט / המסר</label>
@@ -309,7 +351,7 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">מקור / מחבר (אופציונלי)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">מקור / מחבר</label>
                 <input 
                   type="text" 
                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none"
@@ -320,10 +362,9 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
             </div>
           </section>
 
-          {/* Images Settings */}
           <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-sky-800">תמונות מתחלפות</h3>
+              <h3 className="text-lg font-bold text-sky-800">ניהול תמונות</h3>
               <div className="flex items-center gap-2">
                 <label className="text-sm text-slate-600">זמן החלפה (שניות):</label>
                 <input 
@@ -336,18 +377,12 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
               </div>
             </div>
             
-            {/* ImgBB Image Upload */}
             <div className="mb-6 bg-white p-4 rounded-xl border border-sky-200 shadow-sm">
               <h4 className="font-bold text-sky-700 mb-2 flex items-center gap-2">
-                <Cloud size={18} /> העלאת תמונות מהמחשב (באמצעות ImgBB)
+                העלאת תמונות מהמחשב (באמצעות ImgBB)
               </h4>
-              <p className="text-xs text-slate-500 mb-4">
-                הזן מפתח API של ImgBB כדי להעלות תמונות ישירות מתוך המחשב. התמונות יאוחסנו בחינם בענן. 
-                <a href="https://api.imgbb.com/" target="_blank" rel="noreferrer" className="text-sky-500 underline mr-1">להנפקת מפתח בחינם לחץ כאן</a>.
-              </p>
-              
               <div className="mb-4">
-                <label className="block text-xs font-medium text-slate-700 mb-1">ImgBB API Key (חובה להעלאה)</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">ImgBB API Key</label>
                 <input 
                   type="text" 
                   placeholder="הדבק כאן את מפתח ה-API..."
@@ -359,58 +394,37 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
               </div>
 
               {formData.imgbbApiKey && (
-                <div className="relative border-2 border-dashed border-sky-300 rounded-lg p-6 text-center hover:bg-sky-50 transition-colors">
+                <div className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isUploading ? 'border-sky-500 bg-sky-50' : 'border-sky-300 hover:bg-sky-50'}`}>
                   <input 
                     type="file" 
                     accept="image/*"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    onChange={async (e) => {
-                      const file = e.target.files[0];
-                      if (!file) return;
-                      
-                      const formDataUpload = new FormData();
-                      formDataUpload.append('image', file);
-                      
-                      try {
-                        // Change button text visual feedback could be added here
-                        const res = await fetch(`https://api.imgbb.com/1/upload?key=${formData.imgbbApiKey}`, {
-                          method: 'POST',
-                          body: formDataUpload
-                        });
-                        const data = await res.json();
-                        if(data.success) {
-                          addArrayItem('images');
-                          handleArrayChange('images', formData.images.length, data.data.url);
-                        } else {
-                          alert('שגיאה בהעלאת התמונה: ' + data.error.message);
-                        }
-                      } catch(err) {
-                        alert('שגיאה בתקשורת עם השרת');
-                      }
-                      e.target.value = ''; // Reset input
-                    }}
+                    multiple
+                    disabled={isUploading}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                    onChange={handleImageUpload}
                   />
                   <div className="flex flex-col items-center gap-2 text-sky-600">
-                    <Plus size={24} />
-                    <span className="font-medium">לחץ כאן לבחירת תמונה מהמחשב</span>
-                    <span className="text-xs text-slate-400">או גרור תמונה לכאן</span>
+                    {isUploading ? (
+                      <span className="font-medium animate-pulse text-sky-700">מעלה תמונות, אנא המתן...</span>
+                    ) : (
+                      <>
+                        <Plus size={24} />
+                        <span className="font-medium">לחץ כאן לבחירת תמונה (או מספר תמונות יחד)</span>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            <h4 className="font-bold text-sky-800 mb-2">תמונות (כתובות ישירות)</h4>
-            <p className="text-xs text-slate-500 mb-4">
-              הדבק כאן קישורים ישירים לתמונות.
-            </p>
-            
             <div className="flex flex-col gap-3">
               {formData.images.map((img, idx) => (
                 <div key={idx} className="flex gap-2">
                   <input 
                     type="text" 
                     placeholder="https://..."
-                    className="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400"
+                    className="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400 text-left text-sm"
+                    dir="ltr"
                     value={img}
                     onChange={(e) => handleArrayChange('images', idx, e.target.value)}
                   />
@@ -423,12 +437,11 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
                 onClick={() => addArrayItem('images')}
                 className="flex items-center gap-2 text-sky-600 hover:text-sky-700 font-medium py-2 px-4 bg-sky-100/50 hover:bg-sky-100 rounded-lg w-fit transition-colors"
               >
-                <Plus size={18} /> הוסף תמונה
+                <Plus size={18} /> הוסף שורת קישור חדשה
               </button>
             </div>
           </section>
 
-          {/* Ticker Settings */}
           <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
             <h3 className="text-lg font-bold text-sky-800 mb-4">הודעות רצות (Ticker)</h3>
             <div className="flex flex-col gap-3">
@@ -470,13 +483,11 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
   );
 };
 
-
 export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
-  const appRef = useRef(null);
   
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('ort_tv_settings');
@@ -497,124 +508,96 @@ export default function App() {
     return (settings.images || []).filter(img => img && img.trim() !== '');
   }, [settings.images]);
 
-  // Save settings to LocalStorage whenever they change
   useEffect(() => {
     localStorage.setItem('ort_tv_settings', JSON.stringify(settings));
   }, [settings]);
 
-  // Format Time and Date
   const timeString = date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   const dateString = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  // CSS for Ticker
   useEffect(() => {
     const style = document.createElement('style');
     style.innerHTML = `
-      @keyframes ticker-rtl {
-        0% { transform: translateX(100vw); }
-        100% { transform: translateX(-100%); }
+      @keyframes ticker-ltr {
+        0% { transform: translate(0, -50%); }
+        100% { transform: translate(calc(100vw + 100%), -50%); }
       }
       .animate-ticker {
-        display: inline-block;
+        position: absolute;
+        right: 100%;
+        top: 50%;
+        display: flex;
+        width: max-content;
         white-space: nowrap;
-        animation: ticker-rtl 35s linear infinite;
+        animation: ticker-ltr 40s linear infinite;
         will-change: transform;
       }
       .animate-ticker:hover {
         animation-play-state: paused;
       }
-      /* Ensure fullscreen container takes full height */
-      :fullscreen {
-        background-color: #f0f9ff; /* sky-50 fallback */
-      }
-      /* Safari fallback */
-      :-webkit-full-screen {
-        background-color: #f0f9ff;
-      }
+      :fullscreen { background-color: #f0f9ff; }
+      :-webkit-full-screen { background-color: #f0f9ff; }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
   }, []);
-
-  // Handle Fullscreen Toggle
-  const toggleFullscreen = () => {
-    // If we are in fallback/pseudo fullscreen mode, exit it
-    if (isPseudoFullscreen) {
-      setIsPseudoFullscreen(false);
-      setIsFullscreen(false);
-      return;
-    }
-
-    const elem = document.documentElement; // Targets the whole page, more reliable
-    if (!document.fullscreenElement) {
-      if (elem.requestFullscreen) {
-        elem.requestFullscreen().then(() => {
-          setIsFullscreen(true);
-        }).catch(err => {
-          console.warn(`Native fullscreen blocked: ${err.message}. Using pseudo-fullscreen fallback.`);
-          setIsPseudoFullscreen(true);
-          setIsFullscreen(true);
-          showToast('עבר למסך מלא מדומה');
-        });
-      } else if (elem.webkitRequestFullscreen) { /* Safari */
-        elem.webkitRequestFullscreen();
-        setIsFullscreen(true);
-      } else if (elem.msRequestFullscreen) { /* IE11 */
-        elem.msRequestFullscreen();
-        setIsFullscreen(true);
-      } else {
-        // Fallback for environments lacking the API
-        setIsPseudoFullscreen(true);
-        setIsFullscreen(true);
-        showToast('עבר למסך מלא מדומה');
-      }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) { /* Safari */
-        document.webkitExitFullscreen();
-      } else if (document.msExitFullscreen) { /* IE11 */
-        document.msExitFullscreen();
-      }
-      setIsFullscreen(false);
-    }
-  };
 
   const showToast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 4000);
   };
 
-  // Listen to fullscreen changes (e.g. if user exits with ESC key)
+  const toggleFullscreen = () => {
+    if (isPseudoFullscreen) {
+      setIsPseudoFullscreen(false);
+      setIsFullscreen(false);
+      return;
+    }
+
+    const elem = document.documentElement;
+    if (!document.fullscreenElement) {
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().then(() => setIsFullscreen(true)).catch(err => {
+          setIsPseudoFullscreen(true);
+          setIsFullscreen(true);
+          showToast('עבר למסך מלא מדומה');
+        });
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+        setIsFullscreen(true);
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        setIsPseudoFullscreen(true);
+        setIsFullscreen(true);
+        showToast('עבר למסך מלא מדומה');
+      }
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement));
     };
-
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange); // Safari
-    document.addEventListener('msfullscreenchange', handleFullscreenChange); // IE11
-    
-    return () => {
-        document.removeEventListener('fullscreenchange', handleFullscreenChange);
-        document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
-        document.removeEventListener('msfullscreenchange', handleFullscreenChange);
-    };
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   return (
     <div 
-      ref={appRef} 
       className={`bg-sky-50 text-slate-800 font-sans overflow-hidden flex flex-col relative selection:bg-sky-200 ${
         isPseudoFullscreen ? 'fixed inset-0 z-[9999] w-full h-full' : 'min-h-screen'
       }`} 
       dir="rtl"
     >
-      
-      {/* Background Layer */}
       <TopoHexBackground />
 
-      {/* Control Buttons (Hidden in top corner) */}
       <div className="absolute top-4 left-4 z-40 flex flex-col gap-2">
         <div className="flex gap-2">
           <button 
@@ -633,7 +616,6 @@ export default function App() {
           </button>
         </div>
         
-        {/* Fallback Toast Message */}
         {toastMsg && (
           <div className="bg-sky-900/80 text-white px-3 py-2 rounded-xl backdrop-blur-md text-xs text-center shadow-lg animate-pulse">
             {toastMsg}
@@ -641,16 +623,14 @@ export default function App() {
         )}
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col p-6 gap-6 z-10 h-screen pb-20">
         
-        {/* Header Area */}
         <header className="bg-white/70 backdrop-blur-lg rounded-3xl p-4 px-8 shadow-xl shadow-sky-200/40 flex items-center justify-between border border-white">
           <div className="flex items-center gap-6">
             {settings.logoUrl && (
               <img 
                 src={settings.logoUrl} 
-                alt="לוגו בית הספר" 
+                alt="לוגו" 
                 className="h-20 w-auto object-contain drop-shadow-md"
                 onError={(e) => e.target.style.display = 'none'}
               />
@@ -661,7 +641,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-10">
-            {/* Date Display */}
             <div className="flex flex-col items-end border-r-2 border-sky-200/50 pr-8">
               <div className="flex items-center gap-2 text-sky-800 font-semibold text-lg">
                 <span>{hebrewDate}</span>
@@ -670,26 +649,20 @@ export default function App() {
                 <span>{dateString}</span>
               </div>
             </div>
-
-            {/* Clock Display */}
             <div className="text-6xl font-black text-sky-900 tracking-tighter" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {timeString}
             </div>
           </div>
         </header>
 
-        {/* Content Area (Carousel + Weather) */}
         <main className="flex-1 grid grid-cols-3 gap-6 min-h-0">
-          {/* Main Image Carousel - 2/3 of the screen */}
           <div className="col-span-2 flex flex-col min-w-0 h-full relative">
-             <ImageCarousel images={allImages} intervalSecs={settings.imageInterval} folderError={null} />
+             <ImageCarousel images={allImages} intervalSecs={settings.imageInterval} />
           </div>
 
-          {/* Weather Sidebar - 1/3 of the screen */}
           <div className="col-span-1 flex flex-col h-full">
             <WeatherWidget forecast={forecast} />
             
-            {/* Quote / Info Widget */}
             <div className="mt-6 flex-1 bg-gradient-to-br from-sky-400 to-sky-600 rounded-3xl shadow-xl shadow-sky-300/50 p-6 flex flex-col justify-center items-center text-white border border-sky-300/50 text-center">
                 <Quote size={40} className="mb-4 opacity-80" />
                 <p className="text-white text-lg font-medium px-2 leading-relaxed">
@@ -703,21 +676,18 @@ export default function App() {
             </div>
           </div>
         </main>
-
       </div>
 
-      {/* News Ticker Footer */}
       <footer className="fixed bottom-0 left-0 right-0 h-16 bg-sky-900 text-white z-20 flex items-center shadow-[0_-10px_40px_rgba(2,132,199,0.3)] border-t-4 border-sky-400">
         <div className="bg-sky-500 h-full flex items-center px-6 font-bold text-xl shrink-0 z-10 shadow-[10px_0_20px_rgba(0,0,0,0.2)]">
           מבזקי ביה"ס
         </div>
-        <div className="flex-1 overflow-hidden h-full flex items-center relative">
-          <div className="animate-ticker text-2xl font-medium flex gap-32 px-10 whitespace-nowrap">
+        <div className="flex-1 overflow-hidden h-full relative">
+          <div className="animate-ticker text-2xl font-medium flex items-center gap-32 px-10">
             {settings.tickerMessages.length > 0 ? (
-              // Duplicate the messages a few times to ensure a smooth continuous loop if there are few messages
               [...settings.tickerMessages, ...settings.tickerMessages, ...settings.tickerMessages].map((msg, idx) => (
-                <span key={idx} className="flex items-center gap-4">
-                  <span className="w-2 h-2 rounded-full bg-sky-300 inline-block" />
+                <span key={idx} className="flex items-center gap-4 shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-sky-300 inline-block shrink-0" />
                   {msg}
                 </span>
               ))
@@ -728,7 +698,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Admin Panel Modal */}
       {isAdminOpen && (
         <AdminPanel 
           settings={settings} 
@@ -736,7 +705,6 @@ export default function App() {
           onClose={() => setIsAdminOpen(false)} 
         />
       )}
-
     </div>
   );
 }
