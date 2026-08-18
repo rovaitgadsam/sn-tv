@@ -407,40 +407,30 @@ const AdminPanel = ({ settings, setSettings, onClose }) => {
               )}
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {formData.images.map((img, idx) => (
-                <div key={idx} className="flex gap-2 items-center bg-white p-2 rounded-xl border border-sky-100 shadow-sm">
+                <div key={idx} className="relative bg-slate-50 rounded-xl border border-sky-200 shadow-sm aspect-video overflow-hidden group">
                   {img ? (
                     <img 
                       src={img} 
                       alt="תצוגה מקדימה" 
-                      className="w-12 h-12 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-50"
+                      className="w-full h-full object-cover"
                       onError={(e) => e.target.style.display = 'none'}
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-lg border border-dashed border-slate-300 shrink-0 bg-slate-50 flex items-center justify-center text-xs text-slate-400">
+                    <div className="w-full h-full flex items-center justify-center text-xs text-slate-400">
                       ריק
                     </div>
                   )}
-                  <input 
-                    type="text" 
-                    placeholder="https://..."
-                    className="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-sky-400 text-left text-sm"
-                    dir="ltr"
-                    value={img}
-                    onChange={(e) => handleArrayChange('images', idx, e.target.value)}
-                  />
-                  <button onClick={() => removeArrayItem('images', idx)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0">
-                    <Trash2 size={20} />
+                  <button 
+                    onClick={() => removeArrayItem('images', idx)} 
+                    className="absolute top-2 left-2 p-2 bg-white/80 hover:bg-red-500 text-red-500 hover:text-white rounded-lg shadow-sm backdrop-blur-sm transition-all"
+                    title="מחק תמונה"
+                  >
+                    <Trash2 size={16} />
                   </button>
                 </div>
               ))}
-              <button 
-                onClick={() => addArrayItem('images')}
-                className="flex items-center gap-2 text-sky-600 hover:text-sky-700 font-medium py-2 px-4 bg-sky-100/50 hover:bg-sky-100 rounded-lg w-fit transition-colors"
-              >
-                <Plus size={18} /> הוסף שורת קישור חדשה
-              </button>
             </div>
           </section>
 
