@@ -830,11 +830,15 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 grid grid-cols-3 gap-6 min-h-0">
-          <div className="col-span-2 flex flex-col min-w-0 h-full">
+        {/* שורת השינוי נמצאת כאן: מחלוקה של 3 לחלוקה של 4 (grid-cols-4) */}
+        <main className="flex-1 grid grid-cols-4 gap-6 min-h-0">
+          
+          {/* אזור התמונות תופס עכשיו 3 עמודות מתוך ה-4 (col-span-3 = 75%) */}
+          <div className="col-span-3 flex flex-col min-w-0 h-full">
              <ImageCarousel images={settings.images} intervalSecs={settings.imageInterval} />
           </div>
 
+          {/* אזור מזג האוויר והציטוט נשאר עמודה 1 מתוך ה-4 (col-span-1 = 25%) */}
           <div className="col-span-1 flex flex-col h-full">
             <WeatherWidget forecast={forecast} />
             
