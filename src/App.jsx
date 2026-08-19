@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Settings, Sun, Cloud, CloudRain, CloudLightning, Wind, X, Plus, Trash2, Clock, Calendar, Droplets, Quote, Maximize, Minimize, Upload, Monitor } from 'lucide-react';
+import { Settings, Sun, Cloud, CloudRain, CloudLightning, Wind, X, Plus, Trash2, Clock, Calendar, Droplets, Quote, Maximize, Minimize, Upload, Monitor, CloudDrizzle, Wifi, WifiOff, Loader2 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -27,7 +27,6 @@ try {
 
 const appId = 'ort-tv-public';
 
-// Default settings for the app
 const DEFAULT_SETTINGS = {
   schoolName: 'אורט שחקים נהריה',
   logoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRbe48vi05L75mmqOyt03JTyMjrDL0QaVkQSSrwHiGmwg&s=10',
@@ -49,7 +48,6 @@ const DEFAULT_SETTINGS = {
   imageInterval: 8, // seconds
 };
 
-// WMO Weather code mapping to Lucide Icons & Hebrew Text
 const getWeatherDetails = (code) => {
   if (code === 0) return { icon: <Sun className="text-yellow-400" size={32} />, text: 'בהיר' };
   if (code >= 1 && code <= 3) return { icon: <Cloud className="text-gray-400" size={32} />, text: 'מעונן חלקית' };
@@ -61,7 +59,6 @@ const getWeatherDetails = (code) => {
   return { icon: <Sun className="text-yellow-400" size={32} />, text: 'בהיר' };
 };
 
-// Hook for current time & date
 const useDateTime = () => {
   const [date, setDate] = useState(new Date());
   const [hebrewDate, setHebrewDate] = useState('');
@@ -94,7 +91,6 @@ const useDateTime = () => {
   return { date, hebrewDate };
 };
 
-// Hook for fetching Open-Meteo weather
 const useWeather = () => {
   const [forecast, setForecast] = useState([]);
   
@@ -207,7 +203,7 @@ const ImageCarousel = ({ images, intervalSecs }) => {
       setCurrentIndex((prev) => {
         const nextIndex = prev + 1;
         if (nextIndex >= shuffledImages.length) {
-          setShuffledImages(shuffleArray(images));
+          setShuffledImages(shuffleArray(images)); // ערבוב מחדש בסיום הסבב
           return 0;
         }
         return nextIndex;
@@ -244,11 +240,17 @@ const ImageCarousel = ({ images, intervalSecs }) => {
   );
 };
 
-const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }) => {
+const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false, dbStatus }) => {
   const [formData, setFormData] = useState({ ...settings });
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef(null);
+
+  // האזנה קריטית לשינויים: אם הענן מתעדכן (או נטען), שים את המידע החדש בטופס!
+  useEffect(() => {
+    // יצירת עותק עמוק כדי למנוע התנגשויות עריכה
+    setFormData(JSON.parse(JSON.stringify(settings)));
+  }, [settings]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -318,17 +320,22 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const cleanedData = {
       ...formData,
       tickerMessages: formData.tickerMessages.filter(m => m.trim() !== ''),
       images: formData.images.filter(img => img.trim() !== '')
     };
-    setSettings(cleanedData);
-    if (!isStandaloneMode && onClose) {
-      onClose();
-    } else {
-      alert('ההגדרות נשמרו בענן בהצלחה! המסך בטלוויזיה יתעדכן כעת מיד.');
+    
+    // שליחה לפונקציית הענן המרכזית וקבלת תשובה האם הצליח
+    const success = await setSettings(cleanedData);
+    
+    if (success) {
+      if (!isStandaloneMode && onClose) {
+        onClose(); // סגירת מודאל בתוך הטלוויזיה
+      } else {
+        alert('✅ ההגדרות נשמרו בענן בהצלחה! מסך הטלוויזיה יתעדכן כעת מיד.');
+      }
     }
   };
 
@@ -336,15 +343,26 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
     window.location.hash = ''; // Remove the hash to go to display mode
   };
 
+  // תצוגת סטטוס לענן
+  const renderDbStatus = () => {
+    if (dbStatus === 'מחובר') return <div className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold"><Wifi size={14}/> מסונכרן לענן</div>;
+    if (dbStatus === 'מתחבר...') return <div className="flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold"><Loader2 className="animate-spin" size={14}/> טוען נתונים...</div>;
+    return <div className="flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold"><WifiOff size={14}/> שגיאת ענן</div>;
+  };
+
   const adminContent = (
     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col mx-auto h-[90vh] lg:h-auto lg:max-h-[90vh]">
       <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-white rounded-t-3xl sticky top-0 z-10">
-        <h2 className="text-2xl font-bold text-sky-900 flex items-center gap-2">
-          <Settings className="text-sky-500" /> הגדרות מסך תצוגה
-        </h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold text-sky-900 flex items-center gap-2">
+            <Settings className="text-sky-500" /> הגדרות מסך
+          </h2>
+          {isStandaloneMode && renderDbStatus()}
+        </div>
+        
         {isStandaloneMode ? (
-          <button onClick={navigateToDisplay} className="flex items-center gap-2 px-4 py-2 bg-sky-100 hover:bg-sky-200 text-sky-700 rounded-xl transition-colors font-medium">
-            <Monitor size={18} /> מעבר לתצוגת הטלוויזיה
+          <button onClick={navigateToDisplay} className="flex items-center gap-2 px-4 py-2 bg-sky-100 hover:bg-sky-200 text-sky-700 rounded-xl transition-colors font-medium text-sm">
+            <Monitor size={18} /> מעבר לטלוויזיה
           </button>
         ) : (
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
@@ -355,7 +373,7 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
 
       <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-8">
         
-        {/* General Settings */}
+        {/* הגדרות כלליות */}
         <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
           <h3 className="text-lg font-bold text-sky-800 mb-4">הגדרות כלליות</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -363,7 +381,7 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
               <label className="block text-sm font-medium text-slate-700 mb-1">שם בית הספר / כותרת</label>
               <input 
                 type="text" 
-                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 focus:border-sky-400 outline-none"
+                className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none"
                 value={formData.schoolName}
                 onChange={(e) => handleChange('schoolName', e.target.value)}
               />
@@ -380,7 +398,7 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
           </div>
         </section>
 
-        {/* Quote Settings */}
+        {/* הגדרות ציטוט */}
         <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
           <h3 className="text-lg font-bold text-sky-800 mb-4">ציטוט / מסר קבוע (הריבוע השמאלי)</h3>
           <div className="grid grid-cols-1 gap-4">
@@ -405,7 +423,7 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
           </div>
         </section>
 
-        {/* Images Settings - Gallery View */}
+        {/* ניהול גלריית תמונות */}
         <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-bold text-sky-800">גלריית תמונות מתחלפות</h3>
@@ -421,7 +439,6 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
             </div>
           </div>
           
-          {/* ImgBB Setup & Upload */}
           <div className="mb-6 bg-white p-5 rounded-xl border border-sky-200 shadow-sm">
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -487,7 +504,6 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
               <div key={idx} className="group relative aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm">
                 <img src={img} alt={`תמונה ${idx+1}`} className="w-full h-full object-cover" onError={(e) => e.target.src = 'https://via.placeholder.com/300?text=שגיאה+בטעינה'} />
                 
-                {/* Delete Button Overlay */}
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <button 
                     onClick={() => removeArrayItem('images', idx)} 
@@ -500,7 +516,6 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
               </div>
             ))}
             
-            {/* Manual Add URL option as a card */}
             <div className="aspect-video bg-white border-2 border-dashed border-sky-300 rounded-xl flex flex-col items-center justify-center p-4 hover:bg-sky-50 transition-colors">
               <button 
                 onClick={() => addArrayItem('images')}
@@ -512,7 +527,6 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
             </div>
           </div>
           
-          {/* Invisible inputs for manual links if added */}
           {formData.images.some(img => img === '') && (
             <div className="mt-4 flex flex-col gap-2">
               <p className="text-xs font-bold text-sky-700">הזן קישור לתמונה החדשה שהוספת:</p>
@@ -535,7 +549,7 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
 
         </section>
 
-        {/* Ticker Settings */}
+        {/* הודעות רצות (טיקר) */}
         <section className="bg-sky-50/50 p-6 rounded-2xl border border-sky-100">
           <h3 className="text-lg font-bold text-sky-800 mb-4">הודעות רצות (Ticker)</h3>
           <div className="flex flex-col gap-3">
@@ -570,13 +584,20 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
             ביטול
           </button>
         )}
-        <button onClick={handleSave} className="px-6 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold shadow-lg shadow-sky-600/30 transition-colors">
-          שמור הגדרות
+        <button 
+          onClick={handleSave} 
+          disabled={dbStatus !== 'מחובר'}
+          className={`px-6 py-2 rounded-xl font-bold shadow-lg transition-colors ${
+            dbStatus === 'מחובר' ? 'bg-sky-600 hover:bg-sky-700 text-white shadow-sky-600/30' : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+          }`}
+        >
+          {dbStatus === 'מחובר' ? 'שמור הגדרות בענן' : 'ממתין לחיבור...'}
         </button>
       </div>
     </div>
   );
 
+  // עטיפה למסך נפרד
   if (isStandaloneMode) {
     return (
       <div className="min-h-screen bg-slate-100 p-4 md:p-8" dir="rtl">
@@ -585,13 +606,13 @@ const AdminPanel = ({ settings, setSettings, onClose, isStandaloneMode = false }
     );
   }
 
+  // עטיפה למודאל בטלוויזיה
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto" dir="rtl">
       {adminContent}
     </div>
   );
 };
-
 
 export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -601,16 +622,18 @@ export default function App() {
   const [currentHash, setCurrentHash] = useState(window.location.hash);
   const appRef = useRef(null);
   
+  // ניהול מצב הנתונים והחיבור
   const [user, setUser] = useState(null);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [dbStatus, setDbStatus] = useState('מתחבר...');
 
   const { date, hebrewDate } = useDateTime();
   const forecast = useWeather();
 
   useEffect(() => {
-    // Only attempt auth if Firebase was successfully initialized
     if (!auth) {
-        showToast('שגיאה בחיבור למסד הנתונים. ודא שקוד ה-Firebase הוזן כראוי.');
+        setDbStatus('שגיאת ענן');
+        showToast('שגיאה באתחול פיירבייס. בדוק הגדרות API.');
         return;
     }
     
@@ -619,6 +642,7 @@ export default function App() {
          await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth init error:", error);
+        setDbStatus('שגיאת הרשאות');
       }
     };
     initAuth();
@@ -628,7 +652,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Wait until user is authenticated anonymously and db is ready
     if (!user || !db) return;
 
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'tv_settings');
@@ -636,13 +659,17 @@ export default function App() {
       (snapshot) => {
         if (snapshot.exists()) {
           setSettings({ ...DEFAULT_SETTINGS, ...snapshot.data() });
+          setDbStatus('מחובר');
         } else {
-          // If document doesn't exist yet, create it with defaults
-          setDoc(docRef, DEFAULT_SETTINGS).catch(e => console.error("Error creating initial doc", e));
+          // יצירת מסמך ראשוני אם לא קיים
+          setDoc(docRef, DEFAULT_SETTINGS)
+            .then(() => setDbStatus('מחובר'))
+            .catch(e => { console.error(e); setDbStatus('שגיאת יצירה'); });
         }
       }, 
       (error) => {
         console.error("Error fetching settings:", error);
+        setDbStatus('שגיאת משיכה');
       }
     );
 
@@ -651,33 +678,33 @@ export default function App() {
 
   const saveSettingsToCloud = async (newSettings) => {
     if (!user || !db) {
-        showToast('אין חיבור לענן. ודא שהגדרות ה-Firebase תקינות.');
-        return;
+        alert('אין חיבור לענן. ודא שהגדרות ה-Firebase תקינות. ייתכן וכללי האבטחה (Rules) חוסמים כתיבה.');
+        return false; // הוחזר שקר כי השמירה נכשלה
     }
     
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'tv_settings');
     try {
       await setDoc(docRef, newSettings);
+      return true; // הוחזר אמת - הצלחה!
     } catch (error) {
       console.error("Error saving settings:", error);
-      showToast('שגיאה בשמירת נתונים לענן.');
+      alert('שגיאה בשמירת נתונים לענן. אם זו פעם ראשונה, ודא שה-Rules ב-Firestore פתוחים (Start in Test Mode).');
+      return false;
     }
   };
 
-  // Listen to hash changes for routing
   useEffect(() => {
     const handleHashChange = () => setCurrentHash(window.location.hash);
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Format Time and Date
   const timeString = date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   const dateString = date.toLocaleDateString('he-IL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  // CSS for Ticker (Speed modified to 60s)
   useEffect(() => {
     const style = document.createElement('style');
+    // משך האנימציה הוגדר ל-60 שניות לקריאה איטית ונוחה
     style.innerHTML = `
       @keyframes ticker-ltr {
         0% { transform: translateX(-100%); }
@@ -692,18 +719,13 @@ export default function App() {
       .animate-ticker:hover {
         animation-play-state: paused;
       }
-      :fullscreen {
-        background-color: #f0f9ff;
-      }
-      :-webkit-full-screen {
-        background-color: #f0f9ff;
-      }
+      :fullscreen { background-color: #f0f9ff; }
+      :-webkit-full-screen { background-color: #f0f9ff; }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
   }, []);
 
-  // Handle Fullscreen Toggle
   const toggleFullscreen = () => {
     if (isPseudoFullscreen) {
       setIsPseudoFullscreen(false);
@@ -741,28 +763,26 @@ export default function App() {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
     };
-
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    
     return () => {
         document.removeEventListener('fullscreenchange', handleFullscreenChange);
         document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
   }, []);
 
-  // Router Logic: If URL ends with #admin, show ONLY the Admin Panel
+  // אם הגולש נמצא בנתיב /#admin הראה *רק* את מסך הניהול על כל הדף!
   if (currentHash === '#admin') {
     return (
       <AdminPanel 
         settings={settings} 
         setSettings={saveSettingsToCloud} 
         isStandaloneMode={true} 
+        dbStatus={dbStatus}
       />
     );
   }
 
-  // Otherwise, show the TV Display
   return (
     <div 
       ref={appRef} 
@@ -830,15 +850,12 @@ export default function App() {
           </div>
         </header>
 
-        {/* שורת השינוי נמצאת כאן: מחלוקה של 3 לחלוקה של 4 (grid-cols-4) */}
         <main className="flex-1 grid grid-cols-4 gap-6 min-h-0">
           
-          {/* אזור התמונות תופס עכשיו 3 עמודות מתוך ה-4 (col-span-3 = 75%) */}
           <div className="col-span-3 flex flex-col min-w-0 h-full">
              <ImageCarousel images={settings.images} intervalSecs={settings.imageInterval} />
           </div>
 
-          {/* אזור מזג האוויר והציטוט נשאר עמודה 1 מתוך ה-4 (col-span-1 = 25%) */}
           <div className="col-span-1 flex flex-col h-full">
             <WeatherWidget forecast={forecast} />
             
@@ -881,7 +898,8 @@ export default function App() {
         <AdminPanel 
           settings={settings} 
           setSettings={saveSettingsToCloud} 
-          onClose={() => setIsAdminOpen(false)} 
+          onClose={() => setIsAdminOpen(false)}
+          dbStatus={dbStatus}
         />
       )}
 
